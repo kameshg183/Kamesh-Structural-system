@@ -17,7 +17,7 @@ export interface AppState {
   length: number;
   highPt: number;
   lowPt: number;
-  queryPt: number | '';
+  inflectionPt: string;
 }
 
 export interface CalculationResult {

@@ -1,7 +1,7 @@
 import { AppState, CalculationResult } from '../types';
 
 export const calculateProfile = (state: AppState): CalculationResult => {
-  const { length, highPt, lowPt, spacing, selectedProfile, rounding, minRadius } = state;
+  const { length, highPt, lowPt, spacing, selectedProfile, rounding, minRadius, inflectionPt } = state;
   
   const points: { x: number; y: number; label?: number }[] = [];
   const drapes: number[] = [];
@@ -17,6 +17,32 @@ export const calculateProfile = (state: AppState): CalculationResult => {
   // Formula: x = 2 * h * R / L
   // We use this to determine the length of the reverse curve segment.
   const getInflectionDist = (segLen: number) => {
+    let overrideValue: number | null = null;
+
+    // Parse user override if provided
+    if (inflectionPt && inflectionPt.trim() !== '') {
+      const raw = inflectionPt.trim();
+      if (raw.endsWith('%')) {
+        // Percentage case: value is percentage of TOTAL LENGTH
+        const pct = parseFloat(raw.replace('%', ''));
+        if (!isNaN(pct)) {
+          overrideValue = (pct / 100) * length;
+        }
+      } else {
+        // Numeric case: value is millimeters
+        const val = parseFloat(raw);
+        if (!isNaN(val)) {
+          overrideValue = val;
+        }
+      }
+    }
+
+    if (overrideValue !== null && overrideValue > 0) {
+      // Clamp to segment length to prevent geometry breaking
+      return Math.min(overrideValue, segLen);
+    }
+
+    // Auto Calculation
     if (segLen <= 0 || absH === 0) return 0;
     const x = (4 * absH * minRadius) / (2 * segLen); // equivalent to 2*h*R/L
     // Clamp to half length to avoid crossing mid-point (safety)

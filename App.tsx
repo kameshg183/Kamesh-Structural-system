@@ -32,7 +32,7 @@ const DEFAULT_STATE: AppState = {
   length: 7000,
   highPt: 450,
   lowPt: 45,
-  queryPt: ''
+  inflectionPt: ''
 };
 
 export default function App() {
@@ -71,7 +71,7 @@ export default function App() {
   useEffect(() => {
       performCalculation();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedProfile, state.length, state.highPt, state.lowPt, state.spacing, state.rounding, state.minRadius]);
+  }, [state.selectedProfile, state.length, state.highPt, state.lowPt, state.spacing, state.rounding, state.minRadius, state.inflectionPt]);
 
   // Chart Colors based on mode
   const gridColor = darkMode ? "#374151" : "#e5e7eb";
@@ -194,16 +194,16 @@ export default function App() {
              </div>
 
              <div className="flex flex-col">
-               <label className="text-xs font-bold mb-1 text-gray-700 dark:text-gray-300">Query Pt :</label>
+               <label className="text-xs font-bold mb-1 text-gray-700 dark:text-gray-300 whitespace-nowrap">Inflection Point :</label>
                <div className="flex items-center">
                  <input 
-                    type="number" 
-                    value={state.queryPt}
-                    onChange={(e) => handleStateChange({ queryPt: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                    className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="Optional"
+                    type="text" 
+                    value={state.inflectionPt}
+                    onChange={(e) => handleStateChange({ inflectionPt: e.target.value })}
+                    className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none placeholder-gray-400"
+                    placeholder="Auto (mm or %)"
                  />
-                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm</span>
+                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm/%</span>
                </div>
              </div>
           </div>
@@ -224,7 +224,14 @@ export default function App() {
             <div className="text-gray-700 dark:text-gray-300">
                <span className="font-semibold">Curve Type {state.selectedProfile}:</span> {PROFILE_DESCRIPTIONS[state.selectedProfile]}
             </div>
-            <div className="text-blue-600 dark:text-blue-400 mt-1">Σ β = {result.betaSum} rad</div>
+            <div className="text-blue-600 dark:text-blue-400 mt-1 flex flex-wrap gap-x-6 items-center">
+               <span>Σ β = {result.betaSum} rad</span>
+               {result.inflectionPoints.length > 0 && (
+                 <span className="font-semibold text-gray-600 dark:text-gray-400">
+                    Inflection x = {result.inflectionPoints.map(p => Math.round(p.x)).join(', ')} mm
+                 </span>
+               )}
+            </div>
           </div>
         </div>
 
