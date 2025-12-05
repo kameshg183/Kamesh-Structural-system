@@ -8,8 +8,7 @@ interface ConfigPanelProps {
   onFlip: () => void;
 }
 
-// Data sets for different strand diameters (Base values in Metric mm)
-// Note: '32s' for 12.9mm had a likely typo in user prompt (20.9 OD), used 110mm based on engineering standard.
+// Data sets for different strand diameters
 const DUCT_DATA_SETS: Record<string, Record<string, { od: number; ecc: number; rad: number }>> = {
   '12.9': {
     'slab': { od: 23, ecc: 2.6, rad: 3200 },
@@ -37,42 +36,61 @@ const DUCT_DATA_SETS: Record<string, Record<string, { od: number; ecc: number; r
   }
 };
 
-const GroupBox: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({ label, children, className = "" }) => (
-  <fieldset className={`border border-gray-300 dark:border-gray-600 rounded px-2 pb-2 pt-1 relative mt-2 ${className}`}>
-    <legend className="text-xs font-semibold text-gray-600 dark:text-gray-400 px-1 ml-1">{label}</legend>
-    {children}
-  </fieldset>
+const Section: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({ label, children, className = "" }) => (
+  <div className={`bg-gray-50 dark:bg-slate-800/40 rounded-lg p-3 border border-gray-100 dark:border-slate-700 ${className}`}>
+    <h3 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{label}</h3>
+    <div className="text-sm">{children}</div>
+  </div>
 );
 
-const Radio: React.FC<{ label: string; name: string; checked: boolean; onChange: () => void }> = ({ label, name, checked, onChange }) => (
-  <label className="flex items-center space-x-1 cursor-pointer mr-3 mb-1">
-    <input
-      type="radio"
-      name={name}
-      checked={checked}
-      onChange={onChange}
-      className="text-blue-600 focus:ring-blue-500 h-3 w-3 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+const ToggleGroup: React.FC<{ 
+  options: { label: string; value: any }[]; 
+  value: any; 
+  onChange: (val: any) => void;
+  small?: boolean; 
+}> = ({ options, value, onChange, small }) => (
+  <div className="flex bg-gray-200 dark:bg-slate-900 rounded-md p-0.5 space-x-0.5">
+    {options.map((opt) => (
+      <button
+        key={String(opt.value)}
+        onClick={() => onChange(opt.value)}
+        className={`
+          flex-1 flex items-center justify-center rounded-sm transition-all duration-200
+          ${small ? 'py-0.5 text-[10px]' : 'py-1 text-xs'} font-medium
+          ${value === opt.value 
+            ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' 
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}
+        `}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
+);
+
+const InputField: React.FC<{ label: string; value: number; onChange: (val: number) => void }> = ({ label, value, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mb-0.5">{label}</label>
+    <input 
+      type="number" 
+      value={value} 
+      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
     />
-    <span className="text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">{label}</span>
-  </label>
+  </div>
 );
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCalc, onFlip }) => {
   const isImperial = state.unit === 'imperial';
   const unitLabel = isImperial ? 'in' : 'mm';
 
-  // Helper to convert MM data values to current unit
   const processVal = (valMM: number) => isImperial ? valMM / 25.4 : valMM;
   const formatVal = (val: number, decimal = 1) => parseFloat(val.toFixed(decimal));
 
-  // Determine active data set based on strand diameter
   const currentStrandDia = (state.strandDiameter === '12.9' || state.strandDiameter === '15.2') ? state.strandDiameter : '15.2';
   const activeDuctData = DUCT_DATA_SETS[currentStrandDia];
 
-  // Get sorted sizes (excluding 'slab')
-  const availableSizes = Object.keys(activeDuctData).filter(k => k !== 'slab').sort((a, b) => {
-    return parseInt(a) - parseInt(b);
-  });
+  const availableSizes = Object.keys(activeDuctData).filter(k => k !== 'slab').sort((a, b) => parseInt(a) - parseInt(b));
 
   const handleDuctChange = (type: 'slab' | 'other', size?: string) => {
     const key = type === 'slab' ? 'slab' : size;
@@ -87,186 +105,203 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
         minRadius: formatVal(processVal(defaults.rad), 0)
       });
     } else {
-      // Fallback for 'Other' or custom
-      onChange({
-        ductType: type,
-        ductSize: size || 'Other'
-      });
+      onChange({ ductType: type, ductSize: size || 'Other' });
     }
   };
 
   const handleStrandChange = (dia: '12.9' | '15.2' | 'other') => {
     const newData: Partial<AppState> = { strandDiameter: dia };
-    
-    // Look up defaults for the new strand diameter
     const targetSet = (dia === '12.9' || dia === '15.2') ? DUCT_DATA_SETS[dia] : DUCT_DATA_SETS['15.2'];
-
-    // Try to map current size to new set
     const currentSize = state.ductType === 'slab' ? 'slab' : state.ductSize;
     let def = targetSet[currentSize];
     
-    // If not found (e.g. size doesn't exist in new diameter), fallback to slab
     if (!def) {
         if (state.ductType !== 'other') {
            def = targetSet['slab'];
            newData.ductType = 'slab';
            newData.ductSize = '';
         } 
-        // If type is 'other' and size is custom, we don't update values automatically
     }
-
     if (def) {
          newData.ductDiaOD = formatVal(processVal(def.od), 2);
          newData.strandEcc = formatVal(processVal(def.ecc), 2);
          newData.minRadius = formatVal(processVal(def.rad), 0);
     }
-    
     onChange(newData);
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Row 1: Profiles, Anchors, Strand, Buttons */}
-      <div className="flex flex-wrap gap-2 items-start">
-        <GroupBox label="Input Profile" className="flex flex-col justify-center min-w-[100px]">
-          <Radio label="c.g. strand" name="inputP" checked={state.inputProfile === 'cg_strand'} onChange={() => onChange({ inputProfile: 'cg_strand' })} />
-          <Radio label="Duct soffit" name="inputP" checked={state.inputProfile === 'duct_soffit'} onChange={() => onChange({ inputProfile: 'duct_soffit' })} />
-        </GroupBox>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      
+      {/* Col 1: General Config (Anchors & Profiles) */}
+      <div className="lg:col-span-4 flex flex-col gap-3">
+        <Section label="Profile Definition">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+               <div>
+                  <span className="text-[10px] text-gray-500 mb-1 block">Input Ref</span>
+                  <ToggleGroup 
+                    small
+                    options={[{ label: 'CG Strand', value: 'cg_strand' }, { label: 'Soffit', value: 'duct_soffit' }]} 
+                    value={state.inputProfile} 
+                    onChange={(v) => onChange({ inputProfile: v })} 
+                  />
+               </div>
+               <div>
+                  <span className="text-[10px] text-gray-500 mb-1 block">Output Ref</span>
+                  <ToggleGroup 
+                    small
+                    options={[{ label: 'CG Strand', value: 'cg_strand' }, { label: 'Soffit', value: 'duct_soffit' }]} 
+                    value={state.outputProfile} 
+                    onChange={(v) => onChange({ outputProfile: v })} 
+                  />
+               </div>
+            </div>
 
-        <GroupBox label="Output Profile" className="flex flex-col justify-center min-w-[100px]">
-          <Radio label="c.g. strand" name="outputP" checked={state.outputProfile === 'cg_strand'} onChange={() => onChange({ outputProfile: 'cg_strand' })} />
-          <Radio label="Duct soffit" name="outputP" checked={state.outputProfile === 'duct_soffit'} onChange={() => onChange({ outputProfile: 'duct_soffit' })} />
-        </GroupBox>
-
-        <GroupBox label="Anchors" className="grid grid-cols-2 gap-x-2">
-          <Radio label="Left end" name="anchors" checked={state.anchors === 'left'} onChange={() => onChange({ anchors: 'left' })} />
-          <Radio label="Both ends" name="anchors" checked={state.anchors === 'both'} onChange={() => onChange({ anchors: 'both' })} />
-          <Radio label="Right end" name="anchors" checked={state.anchors === 'right'} onChange={() => onChange({ anchors: 'right' })} />
-          <Radio label="None" name="anchors" checked={state.anchors === 'none'} onChange={() => onChange({ anchors: 'none' })} />
-        </GroupBox>
-
-        <GroupBox label="Strand Diameter" className="grid grid-cols-2 gap-x-2">
-            <Radio label="12.9 mm" name="strandDia" checked={state.strandDiameter === '12.9'} onChange={() => handleStrandChange('12.9')} />
-            <Radio label="15.2 mm" name="strandDia" checked={state.strandDiameter === '15.2'} onChange={() => handleStrandChange('15.2')} />
-            <Radio label="Other" name="strandDia" checked={state.strandDiameter === 'other'} onChange={() => handleStrandChange('other')} />
-        </GroupBox>
-
-        <div className="flex items-center gap-2 mt-4 ml-2">
-          <button
-            onClick={onCalc}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-400 dark:border-gray-600 rounded shadow-sm hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 text-sm font-medium transition-colors text-gray-800 dark:text-gray-200"
-          >
-            Calc
-          </button>
-          <button
-            onClick={onFlip}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-400 dark:border-gray-600 rounded shadow-sm hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 text-sm font-medium transition-colors text-gray-800 dark:text-gray-200"
-          >
-            Flip Ends
-          </button>
+            <div>
+              <span className="text-[10px] text-gray-500 mb-1 block">Live Anchors</span>
+              <ToggleGroup 
+                options={[
+                  { label: 'None', value: 'none' },
+                  { label: 'Left', value: 'left' },
+                  { label: 'Right', value: 'right' },
+                  { label: 'Both', value: 'both' },
+                ]}
+                value={state.anchors}
+                onChange={(v) => onChange({ anchors: v })}
+              />
+            </div>
+          </div>
+        </Section>
+        
+        <div className="flex gap-2">
+            <button
+                onClick={onCalc}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm text-sm font-semibold transition-colors active:translate-y-0.5"
+            >
+                Calculate Profile
+            </button>
+            <button
+                onClick={onFlip}
+                className="px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 rounded-md shadow-sm text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+            >
+                Flip Ends
+            </button>
         </div>
       </div>
 
-      {/* Row 2: Duct Diameter, Rounding, Spacing */}
-      <div className="flex flex-wrap gap-2">
-        <div className="flex-grow max-w-[650px]">
-          <GroupBox label="Duct Diameter" className="w-full h-full flex flex-col justify-between">
-              {/* Single radio group for Type + Size */}
-              <div className="flex flex-wrap gap-x-2 gap-y-1 mb-1">
-                  <Radio 
-                    label="Slab" 
-                    name="ductDiaGroup" 
-                    checked={state.ductType === 'slab'} 
-                    onChange={() => handleDuctChange('slab')} 
-                  />
-                  
-                  {availableSizes.map(size => (
-                      <Radio 
-                          key={size} 
-                          label={size} 
-                          name="ductDiaGroup" 
-                          checked={state.ductType === 'other' && state.ductSize === size} 
-                          onChange={() => handleDuctChange('other', size)} 
-                      />
-                  ))}
+      {/* Col 2: System Props (Strand & Duct) */}
+      <div className="lg:col-span-5 flex flex-col gap-3">
+         <Section label="System Properties" className="h-full">
+            <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-16">Strand:</span>
+                    <div className="flex-1">
+                        <ToggleGroup 
+                            small
+                            options={[
+                                { label: '12.9 mm', value: '12.9' },
+                                { label: '15.2 mm', value: '15.2' },
+                                { label: 'Other', value: 'other' },
+                            ]}
+                            value={state.strandDiameter}
+                            onChange={(v) => handleStrandChange(v)}
+                        />
+                    </div>
+                </div>
 
-                  <Radio 
-                    label="Other" 
-                    name="ductDiaGroup" 
-                    checked={state.ductType === 'other' && (state.ductSize === 'Other' || !activeDuctData[state.ductSize])} 
-                    onChange={() => handleDuctChange('other', 'Other')} 
-                  />
-              </div>
+                <div className="space-y-2">
+                   <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Duct Size:</span>
+                   <div className="flex flex-wrap gap-1">
+                      <button 
+                        onClick={() => handleDuctChange('slab')}
+                        className={`px-2 py-1 text-[10px] border rounded ${state.ductType === 'slab' ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300' : 'border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400'}`}
+                      >
+                          Slab
+                      </button>
+                      {availableSizes.map(size => (
+                        <button
+                            key={size}
+                            onClick={() => handleDuctChange('other', size)}
+                            className={`px-2 py-1 text-[10px] border rounded ${state.ductType === 'other' && state.ductSize === size ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300' : 'border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400'}`}
+                        >
+                            {size}
+                        </button>
+                      ))}
+                      <button 
+                         onClick={() => handleDuctChange('other', 'Other')}
+                         className={`px-2 py-1 text-[10px] border rounded ${state.ductType === 'other' && (state.ductSize === 'Other' || !activeDuctData[state.ductSize]) ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300' : 'border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400'}`}
+                      >
+                          Other
+                      </button>
+                   </div>
+                </div>
 
-              {/* Numeric Inputs */}
-              <div className="flex items-center gap-2 mt-1 pt-2 border-t border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-                  <div className="flex items-center space-x-1">
-                      <span className="text-xs">Duct Dia O.D. ({unitLabel})</span>
-                      <input 
-                          type="number" 
-                          value={state.ductDiaOD} 
-                          onChange={(e) => onChange({ ductDiaOD: parseFloat(e.target.value) || 0 })}
-                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                  </div>
-                  <div className="flex items-center space-x-1">
-                      <span className="text-xs">Strand Ecc. ({unitLabel})</span>
-                      <input 
-                          type="number" 
-                          value={state.strandEcc} 
-                          onChange={(e) => onChange({ strandEcc: parseFloat(e.target.value) || 0 })}
-                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                  </div>
-                  <div className="flex items-center space-x-1">
-                      <span className="text-xs">Min. Radius ({unitLabel})</span>
-                      <input 
-                          type="number" 
-                          value={state.minRadius} 
-                          onChange={(e) => onChange({ minRadius: parseFloat(e.target.value) || 0 })}
-                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                  </div>
-              </div>
-          </GroupBox>
-        </div>
-
-        <GroupBox label="Rounding">
-            <div className="flex flex-col">
-              {isImperial ? (
-                <>
-                   <Radio label="1/16 in" name="rounding" checked={state.rounding === 0.0625} onChange={() => onChange({ rounding: 0.0625 })} />
-                   <Radio label="1/8 in" name="rounding" checked={state.rounding === 0.125} onChange={() => onChange({ rounding: 0.125 })} />
-                   <Radio label="1/4 in" name="rounding" checked={state.rounding === 0.25} onChange={() => onChange({ rounding: 0.25 })} />
-                </>
-              ) : (
-                <>
-                   <Radio label="1mm" name="rounding" checked={state.rounding === 1} onChange={() => onChange({ rounding: 1 })} />
-                   <Radio label="5mm" name="rounding" checked={state.rounding === 5} onChange={() => onChange({ rounding: 5 })} />
-                   <Radio label="10mm" name="rounding" checked={state.rounding === 10} onChange={() => onChange({ rounding: 10 })} />
-                </>
-              )}
+                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-dashed border-gray-200 dark:border-slate-700">
+                    <InputField label={`OD (${unitLabel})`} value={state.ductDiaOD} onChange={(v) => onChange({ ductDiaOD: v })} />
+                    <InputField label={`Ecc (${unitLabel})`} value={state.strandEcc} onChange={(v) => onChange({ strandEcc: v })} />
+                    <InputField label={`Min R (${unitLabel})`} value={state.minRadius} onChange={(v) => onChange({ minRadius: v })} />
+                </div>
             </div>
-        </GroupBox>
-         
-        <GroupBox label="Spacing">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center space-x-1 mb-1 text-gray-700 dark:text-gray-300">
-                  <input 
-                      type="number" 
-                      value={state.spacing}
-                      onChange={(e) => onChange({ spacing: parseInt(e.target.value) || (isImperial ? 24 : 1000) })}
-                      className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                  <span className="text-xs">{unitLabel} from</span>
-              </div>
-              <div className="flex space-x-2">
-                  <Radio label="Left" name="spaceDir" checked={state.spacingDirection === 'left'} onChange={() => onChange({ spacingDirection: 'left' })} />
-                  <Radio label="Right" name="spaceDir" checked={state.spacingDirection === 'right'} onChange={() => onChange({ spacingDirection: 'right' })} />
-              </div>
-            </div>
-        </GroupBox>
+         </Section>
       </div>
+
+      {/* Col 3: Calculation Rules */}
+      <div className="lg:col-span-3 flex flex-col gap-3">
+         <Section label="Parameters" className="h-full">
+            <div className="space-y-4">
+                <div>
+                    <span className="text-[10px] text-gray-500 mb-1 block">Rounding Increment</span>
+                    <div className="grid grid-cols-3 gap-1">
+                        {isImperial ? (
+                            <>
+                            {[0.0625, 0.125, 0.25].map(v => (
+                                <button 
+                                key={v} onClick={() => onChange({ rounding: v })}
+                                className={`text-[10px] py-1 border rounded ${state.rounding === v ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-slate-700 dark:text-blue-300' : 'border-gray-200 dark:border-slate-700 text-gray-500'}`}
+                                >
+                                {v === 0.0625 ? '1/16"' : v === 0.125 ? '1/8"' : '1/4"'}
+                                </button>
+                            ))}
+                            </>
+                        ) : (
+                            <>
+                            {[1, 5, 10].map(v => (
+                                <button 
+                                key={v} onClick={() => onChange({ rounding: v })}
+                                className={`text-[10px] py-1 border rounded ${state.rounding === v ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-slate-700 dark:text-blue-300' : 'border-gray-200 dark:border-slate-700 text-gray-500'}`}
+                                >
+                                {v}mm
+                                </button>
+                            ))}
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div>
+                    <span className="text-[10px] text-gray-500 mb-1 block">Spacing Interval ({unitLabel})</span>
+                    <div className="flex gap-2 items-center">
+                        <input 
+                            type="number"
+                            value={state.spacing}
+                            onChange={(e) => onChange({ spacing: parseInt(e.target.value) || 0 })}
+                            className="w-16 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded px-2 py-1 text-xs text-right"
+                        />
+                        <div className="flex-1">
+                           <ToggleGroup 
+                             small
+                             options={[{ label: 'From Left', value: 'left' }, { label: 'From Right', value: 'right' }]}
+                             value={state.spacingDirection}
+                             onChange={(v) => onChange({ spacingDirection: v })}
+                           />
+                        </div>
+                    </div>
+                </div>
+            </div>
+         </Section>
+      </div>
+
     </div>
   );
 };

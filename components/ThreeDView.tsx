@@ -20,7 +20,8 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
 
     const scene = new THREE.Scene();
     // Slightly off-white background in light mode for better contrast with highlights
-    scene.background = new THREE.Color(darkMode ? 0x111827 : 0xf3f4f6);
+    // Dark mode: Deep gray/blue background
+    scene.background = new THREE.Color(darkMode ? 0x0f172a : 0xf8fafc);
 
     // Camera setup
     const fov = 50;
@@ -33,7 +34,6 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     const midY = (maxY + minY) / 2;
 
     // Position camera to fit the beam length
-    // Distance required to fit 'length' horizontally with some margin
     const dist = (length * 0.7) / Math.tan((fov * Math.PI) / 360);
     
     camera.position.set(midX, midY + dist * 0.4, dist * 0.8);
@@ -51,21 +51,25 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     controls.dampingFactor = 0.05;
 
     // --- Lighting ---
-    // Increased lighting intensity for better visibility
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
+    // Hemisphere light for natural top-down gradient
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    hemiLight.position.set(0, 200, 0);
+    scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    dirLight.position.set(midX, maxY + length, length * 0.5);
+    // Main Directional Light (Sun-like)
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(midX + length/2, maxY + length, length * 0.5);
+    dirLight.castShadow = false;
     scene.add(dirLight);
     
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    backLight.position.set(midX, maxY, -length);
+    // Back Light (Rim light) to separate object from background
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    backLight.position.set(midX - length/2, maxY, -length);
     scene.add(backLight);
 
     // --- Helpers ---
-    // Ground Grid
-    const gridHelper = new THREE.GridHelper(length * 1.5, 20, darkMode ? 0x555555 : 0x999999, darkMode ? 0x333333 : 0xe5e7eb);
+    // Ground Grid - subtle
+    const gridHelper = new THREE.GridHelper(length * 1.5, 20, darkMode ? 0x334155 : 0xcbd5e1, darkMode ? 0x1e293b : 0xf1f5f9);
     gridHelper.position.set(midX, -100, 0);
     scene.add(gridHelper);
 
@@ -76,15 +80,16 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     const curve = new THREE.CatmullRomCurve3(curvePoints);
     
     // Tube parameters: path, tubularSegments, radius, radialSegments, closed
-    const tubeGeo = new THREE.TubeGeometry(curve, Math.min(200, points.length * 2), 20, 12, false);
+    // Radius fixed at 25 for good visibility
+    const tubeGeo = new THREE.TubeGeometry(curve, Math.min(300, points.length * 3), 25, 16, false);
     
-    // Enhanced Material: High shininess and specular highlights
+    // Enhanced Material: Glossy plastic look
     const tubeMat = new THREE.MeshPhongMaterial({ 
-      color: 0x2563eb, 
-      emissive: darkMode ? 0x1e3a8a : 0x000000, // Slight blue glow in dark mode
-      emissiveIntensity: darkMode ? 0.3 : 0,
-      shininess: 100,
-      specular: 0x60a5fa, // Light blue highlights
+      color: 0x3b82f6, // Bright Blue
+      emissive: 0x1d4ed8, // Deep Blue glow
+      emissiveIntensity: darkMode ? 0.35 : 0.1, // Glows more in dark, slight pop in light
+      shininess: 150, // Very shiny
+      specular: 0xbfdbfe, // Almost white highlights
     });
     const tube = new THREE.Mesh(tubeGeo, tubeMat);
     scene.add(tube);
@@ -93,15 +98,14 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     const basePoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(length, 0, 0)];
     const baseGeo = new THREE.BufferGeometry().setFromPoints(basePoints);
     const baseMat = new THREE.LineBasicMaterial({ 
-        color: darkMode ? 0x9ca3af : 0x4b5563, // High contrast gray
+        color: darkMode ? 0xe2e8f0 : 0x1e293b, // White-ish in dark, Slate-900 in light
         linewidth: 2 
     });
     const baseLine = new THREE.Line(baseGeo, baseMat);
     scene.add(baseLine);
 
     // 3. Drop Lines (Verticals)
-    // Only show fewer lines to keep it clean
-    const step = Math.max(1, Math.floor(points.length / 15));
+    const step = Math.max(1, Math.floor(points.length / 20)); // fewer lines
     const dropsGeo = new THREE.BufferGeometry();
     const dropPositions: number[] = [];
     
@@ -111,20 +115,33 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
         dropPositions.push(p.x, 0, 0);
         dropPositions.push(p.x, p.y, 0);
     }
+    // Always include end point
+    const lastP = points[points.length - 1];
+    if (lastP) {
+      dropPositions.push(lastP.x, 0, 0);
+      dropPositions.push(lastP.x, lastP.y, 0);
+    }
+
     dropsGeo.setAttribute('position', new THREE.Float32BufferAttribute(dropPositions, 3));
     
-    // More visible drop lines
+    // High contrast drop lines
     const dropsMat = new THREE.LineBasicMaterial({ 
-        color: darkMode ? 0x6b7280 : 0x9ca3af, 
+        color: darkMode ? 0x94a3b8 : 0x64748b, // Slate-400 / Slate-500
         transparent: true, 
-        opacity: 0.6 
+        opacity: 0.7
     });
     const drops = new THREE.LineSegments(dropsGeo, dropsMat);
     scene.add(drops);
 
-    // 4. Start/End Blocks (Visual Anchors)
-    const blockGeo = new THREE.BoxGeometry(100, maxY + 100, 200);
-    const blockMat = new THREE.MeshLambertMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.15 });
+    // 4. Visual Anchors (Cubes at ends)
+    const blockGeo = new THREE.BoxGeometry(80, maxY + 100, 150);
+    const blockMat = new THREE.MeshStandardMaterial({ 
+        color: darkMode ? 0x475569 : 0xcbd5e1, 
+        transparent: true, 
+        opacity: 0.3,
+        roughness: 0.2,
+        metalness: 0.1
+    });
     
     const startBlock = new THREE.Mesh(blockGeo, blockMat);
     startBlock.position.set(0, (maxY + 100)/2 - 50, 0);
@@ -178,8 +195,8 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
 
   return (
     <div className="relative w-full h-full">
-        <div ref={mountRef} className="w-full h-full cursor-move rounded-lg overflow-hidden" />
-        <div className="absolute top-2 left-2 text-[10px] bg-black/50 text-white px-2 py-1 rounded pointer-events-none select-none">
+        <div ref={mountRef} className="w-full h-full cursor-move rounded-lg overflow-hidden ring-1 ring-gray-200 dark:ring-gray-800" />
+        <div className="absolute top-2 left-2 text-[10px] bg-white/10 dark:bg-black/30 backdrop-blur-sm text-gray-800 dark:text-white px-2 py-1 rounded pointer-events-none select-none border border-white/20">
             Rotate: Left Click | Pan: Right Click | Zoom: Scroll
         </div>
     </div>

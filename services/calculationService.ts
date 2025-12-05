@@ -1,15 +1,60 @@
 import { AppState, CalculationResult } from '../types';
 
-export const calculateProfile = (state: AppState): CalculationResult => {
-  const { length, highPt, lowPt, spacing, selectedProfile, rounding, minRadius, inflectionPt } = state;
+// Helper for spacing distribution logic
+// Rules derived from user requirements:
+// 1. Spacing distribution starts from High Point (Start).
+// 2. If remainder >= 0.7 * Spacing, it becomes the first segment.
+// 3. If remainder < 0.7 * Spacing, it is combined with one standard segment and split into two.
+const calculateSpaces = (length: number, spacing: number, unit: 'metric' | 'imperial'): number[] => {
+  if (length <= 0 || spacing <= 0) return [];
   
-  const points: { x: number; y: number; label?: number }[] = [];
-  const drapes: number[] = [];
-  const spaces: number[] = [];
-  
-  const numSegments = Math.floor(length / spacing);
-  const remainder = length % spacing;
+  const tolerance = 0.01;
+  const rem = length % spacing;
+  const count = Math.floor(length / spacing);
 
+  // Exact multiple
+  if (rem < tolerance || Math.abs(rem - spacing) < tolerance) {
+     return Array(count).fill(spacing);
+  }
+
+  // Case 1: Remainder is large enough (>= 70% of spacing) -> Add as first segment
+  // E.g. L=5700, S=1000 -> 700, 1000, 1000...
+  if (rem >= 0.7 * spacing) {
+     // Check if count is 0 (shouldn't happen given >= 0.7S implies L < S if count=0, but standard logic)
+     return [rem, ...Array(count).fill(spacing)];
+  }
+  
+  // Case 2: Remainder is small -> Split first standard segment + remainder into two
+  // E.g. L=5100, S=1000 -> Total=1100 -> 500, 600, 1000...
+  // We consume one standard spacing from the count for the split.
+  const totalStart = spacing + rem;
+  let s1: number, s2: number;
+
+  // Specific rounding for Metric 1000 spacing to match provided examples exactly
+  // (e.g. 1100 -> 500, 600; 1300 -> 600, 700)
+  if (unit === 'metric' && Math.abs(spacing - 1000) < 1) {
+     // Split logic: floor(total / 200) * 100
+     s1 = Math.floor(totalStart / 200) * 100;
+     s2 = totalStart - s1;
+  } else {
+     // General case: Even split
+     const half = totalStart / 2;
+     if (unit === 'metric') {
+        s1 = Math.floor(half); // Keep clean integers for metric
+     } else {
+        s1 = parseFloat(half.toFixed(2));
+     }
+     s2 = totalStart - s1;
+  }
+
+  // Standard segments remaining: (N - 1)
+  const standardCount = Math.max(0, count - 1);
+  return [s1, s2, ...Array(standardCount).fill(spacing)];
+};
+
+export const calculateProfile = (state: AppState): CalculationResult => {
+  const { length, highPt, lowPt, spacing, selectedProfile, rounding, minRadius, inflectionPt, unit } = state;
+  
   // Constants for calculation
   const h = highPt - lowPt; // Positive if High > Low
   const absH = Math.abs(h);
@@ -37,18 +82,13 @@ export const calculateProfile = (state: AppState): CalculationResult => {
       }
     }
 
-    // Check if the override value is valid and non-zero
-    // The prompt specifies: "check if the Inflection Point value is either empty or zero. If it is, automatically calculate"
     if (overrideValue !== null && overrideValue > 0) {
-      // Clamp to segment length to prevent geometry breaking
-      // For some profiles (like profile 2), segLen is the total length, so this prevents x_infl > L
       return Math.min(overrideValue, segLen);
     }
 
     // Auto Calculation
     if (segLen <= 0 || absH === 0) return 0;
     const x = (4 * absH * minRadius) / (2 * segLen); // equivalent to 2*h*R/L
-    // Clamp to half length to avoid crossing mid-point (safety)
     return Math.min(x, segLen / 2);
   };
 
@@ -56,7 +96,6 @@ export const calculateProfile = (state: AppState): CalculationResult => {
     switch (selectedProfile) {
       case 1:
         // 1. Simple half parabola - no reverse Curve (Vertex at Low Point)
-        // y = a(x - L)^2 + Low. 
         {
           const a = (highPt - lowPt) / Math.pow(length, 2);
           return a * Math.pow(x - length, 2) + lowPt;
@@ -64,20 +103,12 @@ export const calculateProfile = (state: AppState): CalculationResult => {
 
       case 2:
         // 2. Half Parabola with reverse curve (S-Curve)
-        // Reverse curve at x=0 (High). Main parabola at x=L (Low).
-        // Transition at x_infl.
         {
           const x_infl = getInflectionDist(length);
-          
           if (x < x_infl) {
-             // Reverse curve: Parabola vertex at (0, High).
-             // Matches slope with main parabola at x_infl.
-             // Based on derivation: A = (High - Low) / (x_infl * L)
              const A = (highPt - lowPt) / (x_infl * length);
              return highPt - A * x * x;
           } else {
-             // Main parabola: Vertex at (L, Low).
-             // B = (High - Low) / (L * (L - x_infl))
              const B = (highPt - lowPt) / (length * (length - x_infl));
              return lowPt + B * Math.pow(x - length, 2);
           }
@@ -85,25 +116,16 @@ export const calculateProfile = (state: AppState): CalculationResult => {
 
       case 3:
         // 3. Full parabola with reverse curve at each end
-        // Symmetric. Midpoint at L/2 (Low). Ends at High.
-        // Consider half-span 0..L/2.
         {
            const mid = length / 2;
-           // Segment length is mid.
            const x_infl = getInflectionDist(mid);
-
-           // Working on the left half (0 to mid)
            let val = 0;
-           // Local x coordinate relative to the start of the half-span
-           // For left side: xx = x. For right side: xx = length - x.
            const xx = x < mid ? x : length - x;
 
            if (xx < x_infl) {
-              // Reverse curve at support
               const A = (highPt - lowPt) / (x_infl * mid);
               val = highPt - A * xx * xx;
            } else {
-              // Main parabola at center (Vertex at mid)
               const B = (highPt - lowPt) / (mid * (mid - x_infl));
               val = lowPt + B * Math.pow(xx - mid, 2);
            }
@@ -112,9 +134,8 @@ export const calculateProfile = (state: AppState): CalculationResult => {
 
       case 4:
         // 4. Straight parabolic with reverse curve at each end
-        // "Bath tub" shape.
         {
-          const r = 0.25; // Ratio of curve length
+          const r = 0.25; 
           const x1 = length * r;
           const x2 = length * (1 - r);
           
@@ -131,12 +152,9 @@ export const calculateProfile = (state: AppState): CalculationResult => {
 
       case 5:
         // 5. Straight segment with a parabolic reverse curve at top end
-        // Curve from 0 to x_infl (Vertex 0, High). Line x_infl to L.
         {
            const x_infl = getInflectionDist(length);
-           
            if (x < x_infl) {
-              // Parabola: y = High - A x^2
               const A = (highPt - lowPt) / (2 * length * x_infl - x_infl * x_infl);
               return highPt - A * x * x;
            } else {
@@ -149,33 +167,22 @@ export const calculateProfile = (state: AppState): CalculationResult => {
 
       case 6:
         // 6. Straight segment with a parabolic reverse curve at bottom end
-        // Line from 0 to L - x_infl. Curve from L - x_infl to L (Vertex L, Low).
         {
           const x_infl = getInflectionDist(length);
-          const xt = length - x_infl; // Transition point
-
+          const xt = length - x_infl; 
           if (x < xt) {
-             // Line segment
-             // Parabola part A (for x > xt): y = Low + A(x-L)^2
-             // Match at xt. A = (High - Low) / (L^2 - xt^2).
              const A = (highPt - lowPt) / (length * length - xt * xt);
-             
-             // Back calculate line slope from parabola deriv at xt
-             // y' = 2A(x-L). at xt: m = 2A(xt-L).
-             // y_xt = Low + A(xt-L)^2.
-             // Line equation: y - y_xt = m(x - xt).
              const m = 2 * A * (xt - length);
              const y_xt = lowPt + A * Math.pow(xt - length, 2);
              return m * (x - xt) + y_xt;
           } else {
-             // Parabola part
              const A = (highPt - lowPt) / (length * length - xt * xt);
              return lowPt + A * Math.pow(x - length, 2);
           }
         }
 
       case 7:
-        // 7. Inverted Simple half parabola - no reverse Curve (Vertex at High)
+        // 7. Inverted Simple half parabola - no reverse Curve
         {
            const a = (lowPt - highPt) / Math.pow(length, 2);
            return a * x * x + highPt;
@@ -186,7 +193,6 @@ export const calculateProfile = (state: AppState): CalculationResult => {
         {
            const mid = length / 2;
            const midY = (highPt + lowPt) / 2;
-           
            if (x < mid) {
               const a = (highPt - midY) / (mid * mid);
               return highPt - a * x * x;
@@ -197,7 +203,6 @@ export const calculateProfile = (state: AppState): CalculationResult => {
         }
 
       default:
-        // Linear Fallback
         return highPt + (lowPt - highPt) * (x / length);
     }
   };
@@ -206,38 +211,50 @@ export const calculateProfile = (state: AppState): CalculationResult => {
     return Math.round(val / rounding) * rounding;
   };
 
-  // Generate points
-  for (let i = 0; i <= numSegments; i++) {
-    const x = i * spacing;
-    const rawY = calculateY(x);
-    const roundedY = roundValue(rawY);
-    
-    points.push({ x, y: rawY, label: roundedY });
-    drapes.push(roundedY);
-    spaces.push(spacing);
+  // --- Calculate Points based on Spacing Pattern ---
+  
+  const spaces = calculateSpaces(length, spacing, unit);
+  const points: { x: number; y: number; label?: number }[] = [];
+  const drapes: number[] = [];
+  
+  let currentX = 0;
+  
+  // 1. Add Start Point (0)
+  const startY = calculateY(0);
+  const roundedStartY = roundValue(startY);
+  points.push({ x: 0, y: startY, label: roundedStartY });
+  drapes.push(roundedStartY);
+
+  // 2. Add Subsequent Points
+  for (const s of spaces) {
+      currentX += s;
+      
+      // Prevent small floating point overshoot
+      if (currentX > length - 0.001) currentX = length;
+
+      const y = calculateY(currentX);
+      const roundedY = roundValue(y);
+      points.push({ x: currentX, y: y, label: roundedY });
+      drapes.push(roundedY);
   }
 
-  // Handle last point if exact division
-  if (remainder > 0) {
-    const x = length;
-    const rawY = calculateY(x);
-    const roundedY = roundValue(rawY);
-    if (points[points.length - 1].x !== length) {
-       points.push({ x, y: rawY, label: roundedY });
-       drapes.push(roundedY);
-       spaces.push(remainder);
-    }
+  // Force last point to be exactly L/LowPt if not reached (safety)
+  // With calculateSpaces logic, the sum should equal L, but check float precision
+  const lastPt = points[points.length - 1];
+  if (Math.abs(lastPt.x - length) > 1) {
+      // If we somehow missed the end, add it.
+      const endY = calculateY(length);
+      const roundedEndY = roundValue(endY);
+      points.push({ x: length, y: endY, label: roundedEndY });
+      drapes.push(roundedEndY);
+      spaces.push(length - lastPt.x);
   }
 
-  const finalSpaces = spaces.slice(0, points.length - 1);
-
-  // Calculate beta summation based on approximation formula: sum(beta) = 4 * h / L
+  // Calculate beta summation
   const betaSum = length > 0 ? (4 * absH) / length : 0;
 
   // Calculate Inflection Points for visualization
   const inflectionPoints: { x: number; y: number }[] = [];
-  
-  // Helper to add point safely
   const addIp = (x: number) => {
      if (x > 0 && x < length) {
         inflectionPoints.push({ x, y: calculateY(x) });
@@ -254,12 +271,10 @@ export const calculateProfile = (state: AppState): CalculationResult => {
       addIp(dist);
       addIp(length - dist);
     } else if (selectedProfile === 4) {
-      // Profile 4: Straight parabolic with reverse curve at each end (r=0.25)
       const r = 0.25;
       addIp(length * r);
       addIp(length * (1 - r));
     } else if (selectedProfile === 8) {
-      // Profile 8: Half parabola with a reverse curve mid point given
       addIp(length / 2);
     }
   }
@@ -267,7 +282,7 @@ export const calculateProfile = (state: AppState): CalculationResult => {
   return {
     points,
     drapes,
-    spaces: finalSpaces,
+    spaces,
     betaSum: parseFloat(betaSum.toFixed(3)),
     inflectionPoints
   };
