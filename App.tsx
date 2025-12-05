@@ -4,6 +4,7 @@ import { calculateProfile } from './services/calculationService';
 import { ConfigPanel } from './components/ConfigPanel';
 import { ProfileSelector, PROFILE_DESCRIPTIONS } from './components/ProfileSelector';
 import { ResultsPanel } from './components/ResultsPanel';
+import { ThreeDView } from './components/ThreeDView';
 import {
   LineChart,
   Line,
@@ -38,6 +39,7 @@ const DEFAULT_STATE: AppState = {
 export default function App() {
   const [state, setState] = useState<AppState>(DEFAULT_STATE);
   const [result, setResult] = useState<CalculationResult>({ points: [], drapes: [], spaces: [], betaSum: 0, inflectionPoints: [] });
+  const [viewMode, setViewMode] = useState<'2D' | '3D'>('2D');
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -125,7 +127,7 @@ export default function App() {
       <header className="mb-2 border-b border-gray-300 dark:border-gray-700 pb-2 flex justify-between items-center">
         <h1 className="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center">
           <span className="mr-2">📈</span>
-          Kamesh Structural Systems - Tendon Drapes
+          Utracon Structural Systems - Tendon Drapes
         </h1>
         <button 
           onClick={() => setDarkMode(!darkMode)}
@@ -217,8 +219,8 @@ export default function App() {
 
         </div>
 
-        {/* Chart Info Header (Moved out of chart area) */}
-        <div className="mt-4 px-1">
+        {/* Chart Info Header */}
+        <div className="mt-4 px-1 flex justify-between items-end">
           <div className="text-xs font-mono">
             <div className="font-bold underline mb-1 text-gray-800 dark:text-gray-200">Tendon Profile to Soffit of Duct</div>
             <div className="text-gray-700 dark:text-gray-300">
@@ -233,54 +235,82 @@ export default function App() {
                )}
             </div>
           </div>
+
+          <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-md border border-gray-300 dark:border-gray-700">
+            <button
+               onClick={() => setViewMode('2D')}
+               className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
+                  viewMode === '2D' 
+                  ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+               }`}
+            >
+              2D
+            </button>
+            <button
+               onClick={() => setViewMode('3D')}
+               className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
+                  viewMode === '3D' 
+                  ? 'bg-white dark:bg-gray-700 shadow text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+               }`}
+            >
+              3D
+            </button>
+          </div>
         </div>
 
-        {/* Chart Area */}
-        <div className="mt-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 relative flex-grow min-h-[300px] transition-colors">
-           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-              <LineChart 
-                data={result.points} 
-                margin={{ top: 40, right: 20, bottom: 20, left: 40 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                <XAxis 
-                   dataKey="x" 
-                   type="number" 
-                   domain={[0, state.length]} 
-                   tickCount={Math.floor(state.length/1000) + 1}
-                   tick={{fontSize: 12, fill: axisColor}}
-                />
-                <YAxis 
-                   domain={['auto', 'auto']} 
-                   hide 
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line 
-                   type="monotone" 
-                   dataKey="y" 
-                   stroke="#2563eb" 
-                   strokeWidth={2} 
-                   dot={<CustomDot />}
-                   isAnimationActive={false}
-                />
-                {result.inflectionPoints.map((pt, idx) => (
-                    <ReferenceDot 
-                      key={idx} 
-                      x={pt.x} 
-                      y={pt.y} 
-                      r={6} 
-                      fill="#db2777" 
-                      stroke="#fff"
-                      strokeWidth={2}
-                      label={{ position: 'top', value: 'IP', fill: dotText, fontSize: 10, fontWeight: 'bold' }}
-                    />
-                ))}
-              </LineChart>
-           </ResponsiveContainer>
-           
-           <div className="absolute bottom-2 left-2 text-[10px] text-gray-400 dark:text-gray-500">
-               Units: mm
-           </div>
+        {/* Chart / 3D Area */}
+        <div className="mt-2 border border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-900 relative h-[450px] transition-colors">
+           {viewMode === '2D' ? (
+             <>
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart 
+                      data={result.points} 
+                      margin={{ top: 40, right: 20, bottom: 20, left: 40 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                      <XAxis 
+                        dataKey="x" 
+                        type="number" 
+                        domain={[0, state.length]} 
+                        tickCount={Math.floor(state.length/1000) + 1}
+                        tick={{fontSize: 12, fill: axisColor}}
+                      />
+                      <YAxis 
+                        domain={['auto', 'auto']} 
+                        hide 
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line 
+                        type="monotone" 
+                        dataKey="y" 
+                        stroke="#2563eb" 
+                        strokeWidth={2} 
+                        dot={<CustomDot />}
+                        isAnimationActive={false}
+                      />
+                      {result.inflectionPoints.map((pt, idx) => (
+                          <ReferenceDot 
+                            key={idx} 
+                            x={pt.x} 
+                            y={pt.y} 
+                            r={6} 
+                            fill="#db2777" 
+                            stroke="#fff"
+                            strokeWidth={2}
+                            label={{ position: 'top', value: 'IP', fill: dotText, fontSize: 10, fontWeight: 'bold' }}
+                          />
+                      ))}
+                    </LineChart>
+                </ResponsiveContainer>
+                <div className="absolute bottom-2 left-2 text-[10px] text-gray-400 dark:text-gray-500">
+                    Units: mm
+                </div>
+             </>
+           ) : (
+             <ThreeDView points={result.points} length={state.length} darkMode={darkMode} />
+           )}
         </div>
 
         {/* Footer Results */}
@@ -289,7 +319,7 @@ export default function App() {
       </div>
       
       <footer className="mt-4 text-center text-xs text-gray-400 dark:text-gray-600">
-         &copy; {new Date().getFullYear()} Kamesh Structural Systems
+         &copy; {new Date().getFullYear()} Utracon Structural Systems
       </footer>
     </div>
   );

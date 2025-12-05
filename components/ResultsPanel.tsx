@@ -74,32 +74,63 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
     dxf += "9\n$EXTMAX\n10\n" + maxX + "\n20\n" + (maxY + textSize * 2) + "\n30\n0.0\n";
     dxf += "0\nENDSEC\n";
 
+    // TABLES Section (Layers)
+    dxf += "0\nSECTION\n";
+    dxf += "2\nTABLES\n";
+    
+    // LAYER Table
+    dxf += "0\nTABLE\n";
+    dxf += "2\nLAYER\n";
+    // Number of layers including 0
+    dxf += "70\n7\n"; 
+
+    // Layer 0 (Standard)
+    dxf += "0\nLAYER\n2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n";
+
+    // Layer AXES (Color 7 - White/Black)
+    dxf += "0\nLAYER\n2\nAXES\n70\n0\n62\n7\n6\nCONTINUOUS\n";
+
+    // Layer DROPS (Color 8 - Gray)
+    dxf += "0\nLAYER\n2\nDROPS\n70\n0\n62\n8\n6\nCONTINUOUS\n";
+
+    // Layer PROFILE (Color 1 - Red)
+    dxf += "0\nLAYER\n2\nPROFILE\n70\n0\n62\n1\n6\nCONTINUOUS\n";
+
+    // Layer INFLECTION (Color 6 - Magenta)
+    dxf += "0\nLAYER\n2\nINFLECTION\n70\n0\n62\n6\n6\nCONTINUOUS\n";
+
+    // Layer TEXT_DRAPE (Color 2 - Yellow)
+    dxf += "0\nLAYER\n2\nTEXT_DRAPE\n70\n0\n62\n2\n6\nCONTINUOUS\n";
+
+    // Layer TEXT_SPACE (Color 3 - Green)
+    dxf += "0\nLAYER\n2\nTEXT_SPACE\n70\n0\n62\n3\n6\nCONTINUOUS\n";
+
+    dxf += "0\nENDTAB\n";
+    dxf += "0\nENDSEC\n";
+
     // ENTITIES Section
     dxf += "0\nSECTION\n";
     dxf += "2\nENTITIES\n";
 
-    // --- Entity: X-Axis Line (Layer: AXES, Color: 7/White) ---
+    // --- Entity: X-Axis Line (Layer: AXES) ---
     dxf += "0\nLINE\n";
     dxf += "8\nAXES\n";
-    dxf += "62\n7\n"; // White/Black
+    // Color is ByLayer (implicit or 256)
     dxf += `10\n${minX}\n20\n0\n30\n0\n`;
     dxf += `11\n${maxX}\n21\n0\n31\n0\n`;
 
-    // --- Entity: Vertical Drop Lines (Layer: DROPS, Color: 8/Gray) ---
+    // --- Entity: Vertical Drop Lines (Layer: DROPS) ---
     points.forEach(p => {
         dxf += "0\nLINE\n";
         dxf += "8\nDROPS\n";
-        dxf += "62\n8\n"; // Gray
         dxf += `10\n${p.x}\n20\n0\n30\n0\n`;      // Bottom (at Axis)
         dxf += `11\n${p.x}\n21\n${p.y}\n31\n0\n`; // Top (at Curve)
     });
 
-    // --- Entity: Profile Polyline (Layer: PROFILE, Color: 1/Red) ---
-    // This acts as the "Spline" visualization
+    // --- Entity: Profile Polyline (Layer: PROFILE) ---
     // Using POLYLINE (Old style) which is fully compatible with AC1009 (R12)
     dxf += "0\nPOLYLINE\n";
     dxf += "8\nPROFILE\n";
-    dxf += "62\n1\n"; // Red
     dxf += "66\n1\n"; // Vertices follow
     dxf += "10\n0.0\n20\n0.0\n30\n0.0\n"; // Dummy point required for POLYLINE header
     dxf += "70\n0\n"; // 2D Polyline flag
@@ -115,20 +146,18 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
     dxf += "0\nSEQEND\n";
     dxf += "8\nPROFILE\n";
 
-    // --- Entity: Inflection Points (Layer: INFLECTION, Color: 6/Magenta) ---
+    // --- Entity: Inflection Points (Layer: INFLECTION) ---
     if (inflectionPoints && inflectionPoints.length > 0) {
       inflectionPoints.forEach(p => {
           // Circle marker
           dxf += "0\nCIRCLE\n";
           dxf += "8\nINFLECTION\n";
-          dxf += "62\n6\n"; // Magenta
           dxf += `10\n${p.x}\n20\n${p.y}\n30\n0\n`;
           dxf += `40\n${textSize * 0.4}\n`; // Radius proportional to text size
 
           // Label "IP"
           dxf += "0\nTEXT\n";
           dxf += "8\nINFLECTION\n";
-          dxf += "62\n6\n"; // Magenta
           dxf += `10\n${p.x}\n20\n${p.y + textSize}\n30\n0\n`;
           dxf += `40\n${textSize * 0.8}\n`; // Text Height
           dxf += "1\nIP\n";
@@ -138,7 +167,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
       });
     }
 
-    // --- Entity: Drape Text (Layer: TEXT_DRAPE, Color: 2/Yellow) ---
+    // --- Entity: Drape Text (Layer: TEXT_DRAPE) ---
     points.forEach(p => {
         const label = Math.round(p.y).toString();
         // Position slightly above point
@@ -147,7 +176,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
 
         dxf += "0\nTEXT\n";
         dxf += "8\nTEXT_DRAPE\n";
-        dxf += "62\n2\n"; // Yellow
         dxf += `10\n${tx}\n20\n${ty}\n30\n0\n`;
         dxf += `40\n${textSize}\n`;
         dxf += `1\n${label}\n`;
@@ -157,7 +185,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
         dxf += `11\n${tx}\n21\n${ty}\n31\n0\n`;
     });
 
-    // --- Entity: Space Text (Layer: TEXT_SPACE, Color: 3/Green) ---
+    // --- Entity: Space Text (Layer: TEXT_SPACE) ---
     let cx = 0;
     spaces.forEach(s => {
        const midX = cx + s/2;
@@ -166,7 +194,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
 
        dxf += "0\nTEXT\n";
        dxf += "8\nTEXT_SPACE\n";
-       dxf += "62\n3\n"; // Green
        dxf += `10\n${midX}\n20\n${ty}\n30\n0\n`;
        dxf += `40\n${textSize}\n`;
        dxf += `1\n${label}\n`;

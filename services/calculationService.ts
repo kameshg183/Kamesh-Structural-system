@@ -37,8 +37,11 @@ export const calculateProfile = (state: AppState): CalculationResult => {
       }
     }
 
+    // Check if the override value is valid and non-zero
+    // The prompt specifies: "check if the Inflection Point value is either empty or zero. If it is, automatically calculate"
     if (overrideValue !== null && overrideValue > 0) {
       // Clamp to segment length to prevent geometry breaking
+      // For some profiles (like profile 2), segLen is the total length, so this prevents x_infl > L
       return Math.min(overrideValue, segLen);
     }
 

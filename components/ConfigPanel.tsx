@@ -8,18 +8,33 @@ interface ConfigPanelProps {
   onFlip: () => void;
 }
 
-const DUCT_DATA: Record<string, { od: number; ecc: number; rad: number }> = {
-  'slab': { od: 23, ecc: 1.4, rad: 3200 },
-  '5s': { od: 60, ecc: 11.5, rad: 2900 },
-  '7s': { od: 65, ecc: 9.9, rad: 3800 },
-  '9s': { od: 75, ecc: 12.6, rad: 4100 },
-  '12s': { od: 85, ecc: 14.9, rad: 4800 },
-  '15s': { od: 90, ecc: 13.4, rad: 5700 },
-  '19s': { od: 100, ecc: 15.1, rad: 6400 },
-  '22s': { od: 110, ecc: 18.4, rad: 6900 },
-  '27s': { od: 120, ecc: 19.6, rad: 7500 },
-  '31s': { od: 125, ecc: 18.8, rad: 8200 },
-  '37s': { od: 135, ecc: 20.1, rad: 9100 },
+// Data sets for different strand diameters
+// Note: '32s' for 12.9mm had a likely typo in user prompt (20.9 OD), used 110mm based on engineering standard (equivalent to 22s of 15.2mm).
+const DUCT_DATA_SETS: Record<string, Record<string, { od: number; ecc: number; rad: number }>> = {
+  '12.9': {
+    'slab': { od: 23, ecc: 2.6, rad: 3200 },
+    '7s':   { od: 60, ecc: 10.9, rad: 2900 },
+    '9s':   { od: 65, ecc: 11.1, rad: 3800 },
+    '12s':  { od: 75, ecc: 14.0, rad: 4100 },
+    '15s':  { od: 85, ecc: 16.8, rad: 4800 },
+    '20s':  { od: 90, ecc: 14.9, rad: 5700 },
+    '27s':  { od: 100, ecc: 14.9, rad: 6400 },
+    '32s':  { od: 110, ecc: 20.9, rad: 6900 }, 
+    '37s':  { od: 120, ecc: 23.7, rad: 7500 },
+  },
+  '15.2': {
+    'slab': { od: 23, ecc: 1.4, rad: 3200 },
+    '5s':   { od: 60, ecc: 11.5, rad: 2900 },
+    '7s':   { od: 65, ecc: 9.9, rad: 3800 },
+    '9s':   { od: 75, ecc: 12.6, rad: 4100 },
+    '12s':  { od: 85, ecc: 14.9, rad: 4800 },
+    '15s':  { od: 90, ecc: 13.4, rad: 5700 },
+    '19s':  { od: 100, ecc: 15.1, rad: 6400 },
+    '22s':  { od: 110, ecc: 18.4, rad: 6900 },
+    '27s':  { od: 120, ecc: 19.6, rad: 7500 },
+    '31s':  { od: 125, ecc: 18.8, rad: 8200 },
+    '37s':  { od: 135, ecc: 20.1, rad: 9100 },
+  }
 };
 
 const GroupBox: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({ label, children, className = "" }) => (
@@ -43,16 +58,23 @@ const Radio: React.FC<{ label: string; name: string; checked: boolean; onChange:
 );
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCalc, onFlip }) => {
-  const ductSizes = ['5s', '7s', '9s', '12s', '15s', '19s', '22s', '27s', '31s', '37s'];
+  // Determine active data set based on strand diameter
+  const currentStrandDia = (state.strandDiameter === '12.9' || state.strandDiameter === '15.2') ? state.strandDiameter : '15.2';
+  const activeDuctData = DUCT_DATA_SETS[currentStrandDia];
+
+  // Get sorted sizes (excluding 'slab')
+  const availableSizes = Object.keys(activeDuctData).filter(k => k !== 'slab').sort((a, b) => {
+    return parseInt(a) - parseInt(b);
+  });
 
   const handleDuctChange = (type: 'slab' | 'other', size?: string) => {
     const key = type === 'slab' ? 'slab' : size;
-    const defaults = key ? DUCT_DATA[key] : null;
+    const defaults = key && activeDuctData[key] ? activeDuctData[key] : null;
 
     if (defaults) {
       onChange({
         ductType: type,
-        ductSize: size || (type === 'slab' ? '' : '5s'),
+        ductSize: size || (type === 'slab' ? '' : availableSizes[0]),
         ductDiaOD: defaults.od,
         strandEcc: defaults.ecc,
         minRadius: defaults.rad
@@ -64,6 +86,41 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
         ductSize: size || 'Other'
       });
     }
+  };
+
+  const handleStrandChange = (dia: '12.9' | '15.2' | 'other') => {
+    const newData: Partial<AppState> = { strandDiameter: dia };
+    
+    // Look up defaults for the new strand diameter
+    const targetSet = (dia === '12.9' || dia === '15.2') ? DUCT_DATA_SETS[dia] : DUCT_DATA_SETS['15.2'];
+
+    if (state.ductType === 'slab') {
+        const def = targetSet['slab'];
+        if (def) {
+            newData.ductDiaOD = def.od;
+            newData.strandEcc = def.ecc;
+            newData.minRadius = def.rad;
+        }
+    } else if (state.ductType === 'other' && state.ductSize !== 'Other') {
+        // Try to map current size to new set
+        // If exact size exists, use it. Otherwise reset to slab to avoid invalid state
+        if (targetSet[state.ductSize]) {
+             const def = targetSet[state.ductSize];
+             newData.ductDiaOD = def.od;
+             newData.strandEcc = def.ecc;
+             newData.minRadius = def.rad;
+        } else {
+             // Fallback to slab if size doesn't exist in new diameter system
+             newData.ductType = 'slab';
+             newData.ductSize = '';
+             const def = targetSet['slab'];
+             newData.ductDiaOD = def.od;
+             newData.strandEcc = def.ecc;
+             newData.minRadius = def.rad;
+        }
+    }
+    
+    onChange(newData);
   };
 
   return (
@@ -88,9 +145,9 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
         </GroupBox>
 
         <GroupBox label="Strand Diameter" className="grid grid-cols-2 gap-x-2">
-            <Radio label="12.9 mm" name="strandDia" checked={state.strandDiameter === '12.9'} onChange={() => onChange({ strandDiameter: '12.9' })} />
-            <Radio label="15.2 mm" name="strandDia" checked={state.strandDiameter === '15.2'} onChange={() => onChange({ strandDiameter: '15.2' })} />
-            <Radio label="Other" name="strandDia" checked={state.strandDiameter === 'other'} onChange={() => onChange({ strandDiameter: 'other' })} />
+            <Radio label="12.9 mm" name="strandDia" checked={state.strandDiameter === '12.9'} onChange={() => handleStrandChange('12.9')} />
+            <Radio label="15.2 mm" name="strandDia" checked={state.strandDiameter === '15.2'} onChange={() => handleStrandChange('15.2')} />
+            <Radio label="Other" name="strandDia" checked={state.strandDiameter === 'other'} onChange={() => handleStrandChange('other')} />
         </GroupBox>
 
         <div className="flex items-center gap-2 mt-4 ml-2">
@@ -122,7 +179,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
                     onChange={() => handleDuctChange('slab')} 
                   />
                   
-                  {ductSizes.map(size => (
+                  {availableSizes.map(size => (
                       <Radio 
                           key={size} 
                           label={size} 
@@ -135,7 +192,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
                   <Radio 
                     label="Other" 
                     name="ductDiaGroup" 
-                    checked={state.ductType === 'other' && (state.ductSize === 'Other' || !ductSizes.includes(state.ductSize))} 
+                    checked={state.ductType === 'other' && (state.ductSize === 'Other' || !activeDuctData[state.ductSize])} 
                     onChange={() => handleDuctChange('other', 'Other')} 
                   />
               </div>
