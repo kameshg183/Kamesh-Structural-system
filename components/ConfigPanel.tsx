@@ -8,8 +8,8 @@ interface ConfigPanelProps {
   onFlip: () => void;
 }
 
-// Data sets for different strand diameters
-// Note: '32s' for 12.9mm had a likely typo in user prompt (20.9 OD), used 110mm based on engineering standard (equivalent to 22s of 15.2mm).
+// Data sets for different strand diameters (Base values in Metric mm)
+// Note: '32s' for 12.9mm had a likely typo in user prompt (20.9 OD), used 110mm based on engineering standard.
 const DUCT_DATA_SETS: Record<string, Record<string, { od: number; ecc: number; rad: number }>> = {
   '12.9': {
     'slab': { od: 23, ecc: 2.6, rad: 3200 },
@@ -58,6 +58,13 @@ const Radio: React.FC<{ label: string; name: string; checked: boolean; onChange:
 );
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCalc, onFlip }) => {
+  const isImperial = state.unit === 'imperial';
+  const unitLabel = isImperial ? 'in' : 'mm';
+
+  // Helper to convert MM data values to current unit
+  const processVal = (valMM: number) => isImperial ? valMM / 25.4 : valMM;
+  const formatVal = (val: number, decimal = 1) => parseFloat(val.toFixed(decimal));
+
   // Determine active data set based on strand diameter
   const currentStrandDia = (state.strandDiameter === '12.9' || state.strandDiameter === '15.2') ? state.strandDiameter : '15.2';
   const activeDuctData = DUCT_DATA_SETS[currentStrandDia];
@@ -75,9 +82,9 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
       onChange({
         ductType: type,
         ductSize: size || (type === 'slab' ? '' : availableSizes[0]),
-        ductDiaOD: defaults.od,
-        strandEcc: defaults.ecc,
-        minRadius: defaults.rad
+        ductDiaOD: formatVal(processVal(defaults.od), 2),
+        strandEcc: formatVal(processVal(defaults.ecc), 2),
+        minRadius: formatVal(processVal(defaults.rad), 0)
       });
     } else {
       // Fallback for 'Other' or custom
@@ -94,30 +101,24 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
     // Look up defaults for the new strand diameter
     const targetSet = (dia === '12.9' || dia === '15.2') ? DUCT_DATA_SETS[dia] : DUCT_DATA_SETS['15.2'];
 
-    if (state.ductType === 'slab') {
-        const def = targetSet['slab'];
-        if (def) {
-            newData.ductDiaOD = def.od;
-            newData.strandEcc = def.ecc;
-            newData.minRadius = def.rad;
-        }
-    } else if (state.ductType === 'other' && state.ductSize !== 'Other') {
-        // Try to map current size to new set
-        // If exact size exists, use it. Otherwise reset to slab to avoid invalid state
-        if (targetSet[state.ductSize]) {
-             const def = targetSet[state.ductSize];
-             newData.ductDiaOD = def.od;
-             newData.strandEcc = def.ecc;
-             newData.minRadius = def.rad;
-        } else {
-             // Fallback to slab if size doesn't exist in new diameter system
-             newData.ductType = 'slab';
-             newData.ductSize = '';
-             const def = targetSet['slab'];
-             newData.ductDiaOD = def.od;
-             newData.strandEcc = def.ecc;
-             newData.minRadius = def.rad;
-        }
+    // Try to map current size to new set
+    const currentSize = state.ductType === 'slab' ? 'slab' : state.ductSize;
+    let def = targetSet[currentSize];
+    
+    // If not found (e.g. size doesn't exist in new diameter), fallback to slab
+    if (!def) {
+        if (state.ductType !== 'other') {
+           def = targetSet['slab'];
+           newData.ductType = 'slab';
+           newData.ductSize = '';
+        } 
+        // If type is 'other' and size is custom, we don't update values automatically
+    }
+
+    if (def) {
+         newData.ductDiaOD = formatVal(processVal(def.od), 2);
+         newData.strandEcc = formatVal(processVal(def.ecc), 2);
+         newData.minRadius = formatVal(processVal(def.rad), 0);
     }
     
     onChange(newData);
@@ -200,30 +201,30 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
               {/* Numeric Inputs */}
               <div className="flex items-center gap-2 mt-1 pt-2 border-t border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
                   <div className="flex items-center space-x-1">
-                      <span className="text-xs">Duct Dia O.D.</span>
+                      <span className="text-xs">Duct Dia O.D. ({unitLabel})</span>
                       <input 
                           type="number" 
                           value={state.ductDiaOD} 
                           onChange={(e) => onChange({ ductDiaOD: parseFloat(e.target.value) || 0 })}
-                          className="w-12 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                   </div>
                   <div className="flex items-center space-x-1">
-                      <span className="text-xs">Strand Ecc.</span>
+                      <span className="text-xs">Strand Ecc. ({unitLabel})</span>
                       <input 
                           type="number" 
                           value={state.strandEcc} 
                           onChange={(e) => onChange({ strandEcc: parseFloat(e.target.value) || 0 })}
-                          className="w-10 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                   </div>
                   <div className="flex items-center space-x-1">
-                      <span className="text-xs">Min. Radius</span>
+                      <span className="text-xs">Min. Radius ({unitLabel})</span>
                       <input 
                           type="number" 
                           value={state.minRadius} 
                           onChange={(e) => onChange({ minRadius: parseFloat(e.target.value) || 0 })}
-                          className="w-12 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                   </div>
               </div>
@@ -232,9 +233,19 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
 
         <GroupBox label="Rounding">
             <div className="flex flex-col">
-              <Radio label="1mm" name="rounding" checked={state.rounding === 1} onChange={() => onChange({ rounding: 1 })} />
-              <Radio label="5mm" name="rounding" checked={state.rounding === 5} onChange={() => onChange({ rounding: 5 })} />
-              <Radio label="10mm" name="rounding" checked={state.rounding === 10} onChange={() => onChange({ rounding: 10 })} />
+              {isImperial ? (
+                <>
+                   <Radio label="1/16 in" name="rounding" checked={state.rounding === 0.0625} onChange={() => onChange({ rounding: 0.0625 })} />
+                   <Radio label="1/8 in" name="rounding" checked={state.rounding === 0.125} onChange={() => onChange({ rounding: 0.125 })} />
+                   <Radio label="1/4 in" name="rounding" checked={state.rounding === 0.25} onChange={() => onChange({ rounding: 0.25 })} />
+                </>
+              ) : (
+                <>
+                   <Radio label="1mm" name="rounding" checked={state.rounding === 1} onChange={() => onChange({ rounding: 1 })} />
+                   <Radio label="5mm" name="rounding" checked={state.rounding === 5} onChange={() => onChange({ rounding: 5 })} />
+                   <Radio label="10mm" name="rounding" checked={state.rounding === 10} onChange={() => onChange({ rounding: 10 })} />
+                </>
+              )}
             </div>
         </GroupBox>
          
@@ -244,10 +255,10 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ state, onChange, onCal
                   <input 
                       type="number" 
                       value={state.spacing}
-                      onChange={(e) => onChange({ spacing: parseInt(e.target.value) || 1000 })}
-                      className="w-14 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      onChange={(e) => onChange({ spacing: parseInt(e.target.value) || (isImperial ? 24 : 1000) })}
+                      className="w-16 h-6 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 text-xs text-right text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
-                  <span className="text-xs">mm from</span>
+                  <span className="text-xs">{unitLabel} from</span>
               </div>
               <div className="flex space-x-2">
                   <Radio label="Left" name="spaceDir" checked={state.spacingDirection === 'left'} onChange={() => onChange({ spacingDirection: 'left' })} />

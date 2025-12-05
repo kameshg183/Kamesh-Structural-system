@@ -5,6 +5,7 @@ import { ConfigPanel } from './components/ConfigPanel';
 import { ProfileSelector, PROFILE_DESCRIPTIONS } from './components/ProfileSelector';
 import { ResultsPanel } from './components/ResultsPanel';
 import { ThreeDView } from './components/ThreeDView';
+import { convertField, convertSimple } from './utils/unitConverter';
 import {
   LineChart,
   Line,
@@ -17,6 +18,7 @@ import {
 } from 'recharts';
 
 const DEFAULT_STATE: AppState = {
+  unit: 'metric',
   inputProfile: 'duct_soffit',
   outputProfile: 'duct_soffit',
   anchors: 'none',
@@ -51,6 +53,40 @@ export default function App() {
     setState(prev => ({ ...prev, ...updates }));
   };
 
+  const toggleUnit = () => {
+    const newUnit = state.unit === 'metric' ? 'imperial' : 'metric';
+    const isImp = newUnit === 'imperial';
+    
+    // Convert numeric fields using utility
+    const updates: Partial<AppState> = {
+      unit: newUnit,
+      length: convertField(state.length, newUnit, 'general'),
+      highPt: convertField(state.highPt, newUnit, 'general'),
+      lowPt: convertField(state.lowPt, newUnit, 'general'),
+      ductDiaOD: convertField(state.ductDiaOD, newUnit, 'diameter'),
+      strandEcc: convertField(state.strandEcc, newUnit, 'eccentricity'),
+      minRadius: convertField(state.minRadius, newUnit, 'large_radius'),
+      spacing: convertField(state.spacing, newUnit, 'large_radius'),
+    };
+
+    // Handle rounding default reset
+    if (isImp) {
+      updates.rounding = 0.25; // Default to 1/4 inch
+    } else {
+      updates.rounding = 1; // Default to 1mm
+    }
+
+    // Handle inflection point string
+    if (state.inflectionPt && !state.inflectionPt.endsWith('%')) {
+       const val = parseFloat(state.inflectionPt);
+       if (!isNaN(val)) {
+         updates.inflectionPt = convertSimple(val, newUnit, isImp ? 2 : 0).toString();
+       }
+    }
+
+    setState(prev => ({ ...prev, ...updates }));
+  };
+
   const performCalculation = () => {
     const res = calculateProfile(state);
     setResult(res);
@@ -73,7 +109,7 @@ export default function App() {
   useEffect(() => {
       performCalculation();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedProfile, state.length, state.highPt, state.lowPt, state.spacing, state.rounding, state.minRadius, state.inflectionPt]);
+  }, [state.selectedProfile, state.length, state.highPt, state.lowPt, state.spacing, state.rounding, state.minRadius, state.inflectionPt, state.unit]);
 
   // Chart Colors based on mode
   const gridColor = darkMode ? "#374151" : "#e5e7eb";
@@ -82,6 +118,8 @@ export default function App() {
   const dotText = darkMode ? "#e5e7eb" : "#000";
   const tooltipBg = darkMode ? "#1f2937" : "#fff";
   const tooltipBorder = darkMode ? "#4b5563" : "#ccc";
+  
+  const unitLabel = state.unit === 'metric' ? 'mm' : 'in';
 
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -101,9 +139,9 @@ export default function App() {
           style={{ backgroundColor: tooltipBg, borderColor: tooltipBorder, color: dotText }} 
           className="border rounded px-2 py-2 text-xs shadow-lg bg-opacity-95"
         >
-          <div className="font-bold mb-1">{`Dist: ${label}mm`}</div>
+          <div className="font-bold mb-1">{`Dist: ${Number(label).toFixed(1)}${unitLabel}`}</div>
           <div className="text-blue-600 dark:text-blue-400 font-semibold mb-1">
-             {`Height: ${Number(payload[0].value).toFixed(1)}`}
+             {`Height: ${Number(payload[0].value).toFixed(2)}`}
           </div>
           <div className="pt-1 border-t border-gray-200 dark:border-gray-700 space-y-0.5 text-gray-500 dark:text-gray-400">
              <div className="flex justify-between gap-4">
@@ -129,13 +167,39 @@ export default function App() {
           <span className="mr-2">📈</span>
           Utracon Structural Systems - Tendon Drapes
         </h1>
-        <button 
-          onClick={() => setDarkMode(!darkMode)}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
-          title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-          {darkMode ? '☀️' : '🌙'}
-        </button>
+        <div className="flex items-center gap-2">
+           {/* Unit Switch */}
+           <div className="flex bg-gray-200 dark:bg-gray-800 rounded p-1">
+             <button
+               onClick={() => state.unit !== 'metric' && toggleUnit()}
+               className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
+                 state.unit === 'metric' 
+                   ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow' 
+                   : 'text-gray-500 dark:text-gray-400'
+               }`}
+             >
+               Metric
+             </button>
+             <button
+               onClick={() => state.unit !== 'imperial' && toggleUnit()}
+               className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
+                 state.unit === 'imperial' 
+                   ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow' 
+                   : 'text-gray-500 dark:text-gray-400'
+               }`}
+             >
+               Imperial
+             </button>
+           </div>
+           
+           <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+            title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+           >
+            {darkMode ? '☀️' : '🌙'}
+           </button>
+        </div>
       </header>
 
       <div className="flex-grow flex flex-col max-w-5xl mx-auto w-full bg-white dark:bg-gray-900 shadow-lg rounded-lg border border-gray-200 dark:border-gray-800 p-4 transition-colors duration-200">
@@ -165,7 +229,7 @@ export default function App() {
                     onChange={(e) => handleStateChange({ length: parseFloat(e.target.value) || 0 })}
                     className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                  />
-                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm</span>
+                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{unitLabel}</span>
                </div>
              </div>
              
@@ -178,7 +242,7 @@ export default function App() {
                     onChange={(e) => handleStateChange({ highPt: parseFloat(e.target.value) || 0 })}
                     className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                  />
-                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm</span>
+                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{unitLabel}</span>
                </div>
              </div>
 
@@ -191,7 +255,7 @@ export default function App() {
                     onChange={(e) => handleStateChange({ lowPt: parseFloat(e.target.value) || 0 })}
                     className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                  />
-                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm</span>
+                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{unitLabel}</span>
                </div>
              </div>
 
@@ -203,9 +267,9 @@ export default function App() {
                     value={state.inflectionPt}
                     onChange={(e) => handleStateChange({ inflectionPt: e.target.value })}
                     className="w-full min-w-[80px] border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none placeholder-gray-400"
-                    placeholder="Auto (mm or %)"
+                    placeholder={`Auto (${unitLabel} or %)`}
                  />
-                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">mm/%</span>
+                 <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{unitLabel}/%</span>
                </div>
              </div>
           </div>
@@ -230,7 +294,7 @@ export default function App() {
                <span>Σ β = {result.betaSum} rad</span>
                {result.inflectionPoints.length > 0 && (
                  <span className="font-semibold text-gray-600 dark:text-gray-400">
-                    Inflection x = {result.inflectionPoints.map(p => Math.round(p.x)).join(', ')} mm
+                    Inflection x = {result.inflectionPoints.map(p => Math.round(p.x)).join(', ')} {unitLabel}
                  </span>
                )}
             </div>
@@ -274,8 +338,9 @@ export default function App() {
                         dataKey="x" 
                         type="number" 
                         domain={[0, state.length]} 
-                        tickCount={Math.floor(state.length/1000) + 1}
+                        tickCount={10}
                         tick={{fontSize: 12, fill: axisColor}}
+                        tickFormatter={(value) => Number(value).toFixed(0)}
                       />
                       <YAxis 
                         domain={['auto', 'auto']} 
@@ -305,7 +370,7 @@ export default function App() {
                     </LineChart>
                 </ResponsiveContainer>
                 <div className="absolute bottom-2 left-2 text-[10px] text-gray-400 dark:text-gray-500">
-                    Units: mm
+                    Units: {unitLabel}
                 </div>
              </>
            ) : (
@@ -314,7 +379,7 @@ export default function App() {
         </div>
 
         {/* Footer Results */}
-        <ResultsPanel drapes={result.drapes} spaces={result.spaces} inflectionPoints={result.inflectionPoints} />
+        <ResultsPanel drapes={result.drapes} spaces={result.spaces} inflectionPoints={result.inflectionPoints} unit={state.unit} />
 
       </div>
       

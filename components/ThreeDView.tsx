@@ -19,7 +19,8 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     const height = mountRef.current.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(darkMode ? 0x111827 : 0xffffff);
+    // Slightly off-white background in light mode for better contrast with highlights
+    scene.background = new THREE.Color(darkMode ? 0x111827 : 0xf3f4f6);
 
     // Camera setup
     const fov = 50;
@@ -40,6 +41,7 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio); // Crisp rendering on high DPI screens
     mountRef.current.appendChild(renderer.domElement);
 
     // --- Controls ---
@@ -49,25 +51,21 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     controls.dampingFactor = 0.05;
 
     // --- Lighting ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Increased lighting intensity for better visibility
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(midX, maxY * 2, length);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(midX, maxY + length, length * 0.5);
     scene.add(dirLight);
     
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    backLight.position.set(midX, maxY * 2, -length);
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    backLight.position.set(midX, maxY, -length);
     scene.add(backLight);
 
     // --- Helpers ---
     // Ground Grid
-    const gridHelper = new THREE.GridHelper(length * 1.5, 20, 0x888888, 0xdddddd);
-    if (darkMode) {
-        gridHelper.material.color.setHex(0x555555);
-        gridHelper.material.opacity = 0.2;
-        gridHelper.material.transparent = true;
-    }
+    const gridHelper = new THREE.GridHelper(length * 1.5, 20, darkMode ? 0x555555 : 0x999999, darkMode ? 0x333333 : 0xe5e7eb);
     gridHelper.position.set(midX, -100, 0);
     scene.add(gridHelper);
 
@@ -79,10 +77,14 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     
     // Tube parameters: path, tubularSegments, radius, radialSegments, closed
     const tubeGeo = new THREE.TubeGeometry(curve, Math.min(200, points.length * 2), 20, 12, false);
+    
+    // Enhanced Material: High shininess and specular highlights
     const tubeMat = new THREE.MeshPhongMaterial({ 
       color: 0x2563eb, 
-      shininess: 80,
-      specular: 0x444444
+      emissive: darkMode ? 0x1e3a8a : 0x000000, // Slight blue glow in dark mode
+      emissiveIntensity: darkMode ? 0.3 : 0,
+      shininess: 100,
+      specular: 0x60a5fa, // Light blue highlights
     });
     const tube = new THREE.Mesh(tubeGeo, tubeMat);
     scene.add(tube);
@@ -90,7 +92,10 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
     // 2. Reference Baseline (0 height)
     const basePoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(length, 0, 0)];
     const baseGeo = new THREE.BufferGeometry().setFromPoints(basePoints);
-    const baseMat = new THREE.LineBasicMaterial({ color: darkMode ? 0x666666 : 0xaaaaaa, linewidth: 2 });
+    const baseMat = new THREE.LineBasicMaterial({ 
+        color: darkMode ? 0x9ca3af : 0x4b5563, // High contrast gray
+        linewidth: 2 
+    });
     const baseLine = new THREE.Line(baseGeo, baseMat);
     scene.add(baseLine);
 
@@ -107,13 +112,19 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
         dropPositions.push(p.x, p.y, 0);
     }
     dropsGeo.setAttribute('position', new THREE.Float32BufferAttribute(dropPositions, 3));
-    const dropsMat = new THREE.LineBasicMaterial({ color: darkMode ? 0x444444 : 0xcccccc, transparent: true, opacity: 0.5 });
+    
+    // More visible drop lines
+    const dropsMat = new THREE.LineBasicMaterial({ 
+        color: darkMode ? 0x6b7280 : 0x9ca3af, 
+        transparent: true, 
+        opacity: 0.6 
+    });
     const drops = new THREE.LineSegments(dropsGeo, dropsMat);
     scene.add(drops);
 
     // 4. Start/End Blocks (Visual Anchors)
     const blockGeo = new THREE.BoxGeometry(100, maxY + 100, 200);
-    const blockMat = new THREE.MeshLambertMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.3 });
+    const blockMat = new THREE.MeshLambertMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.15 });
     
     const startBlock = new THREE.Mesh(blockGeo, blockMat);
     startBlock.position.set(0, (maxY + 100)/2 - 50, 0);
@@ -168,7 +179,7 @@ export const ThreeDView: React.FC<ThreeDViewProps> = ({ points, length, darkMode
   return (
     <div className="relative w-full h-full">
         <div ref={mountRef} className="w-full h-full cursor-move rounded-lg overflow-hidden" />
-        <div className="absolute top-2 left-2 text-[10px] bg-black/50 text-white px-2 py-1 rounded pointer-events-none">
+        <div className="absolute top-2 left-2 text-[10px] bg-black/50 text-white px-2 py-1 rounded pointer-events-none select-none">
             Rotate: Left Click | Pan: Right Click | Zoom: Scroll
         </div>
     </div>

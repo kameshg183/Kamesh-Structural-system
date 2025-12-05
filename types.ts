@@ -1,6 +1,8 @@
+
 export type ProfileType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export interface AppState {
+  unit: 'metric' | 'imperial';
   inputProfile: 'cg_strand' | 'duct_soffit';
   outputProfile: 'cg_strand' | 'duct_soffit';
   anchors: 'left' | 'right' | 'both' | 'none';
@@ -10,7 +12,7 @@ export interface AppState {
   ductDiaOD: number;
   strandEcc: number;
   minRadius: number;
-  rounding: 1 | 5 | 10;
+  rounding: number;
   spacing: number;
   spacingDirection: 'left' | 'right';
   selectedProfile: ProfileType;

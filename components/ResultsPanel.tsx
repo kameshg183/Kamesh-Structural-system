@@ -4,12 +4,15 @@ interface ResultsPanelProps {
   drapes: number[];
   spaces: number[];
   inflectionPoints: { x: number; y: number }[];
+  unit: 'metric' | 'imperial';
 }
 
-export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, inflectionPoints }) => {
+export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, inflectionPoints, unit }) => {
+  const unitLabel = unit === 'metric' ? 'mm' : 'in';
+
   const handleExportCSV = () => {
     // Generate CSV content
-    const headers = ['Point', 'Drape (mm)', 'Space (mm)'];
+    const headers = [`Point`, `Drape (${unitLabel})`, `Space (${unitLabel})`];
     const rows = drapes.map((drape, index) => {
       // Space corresponds to the interval following the point.
       const space = spaces[index] !== undefined ? spaces[index] : '';
@@ -59,17 +62,19 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
 
     // Heuristic for text size (approx 1.5% of length or 5% of height, clamped)
     const rangeY = maxY - minY;
-    // Ensure text isn't too small or massive. 
-    // For a 7000mm beam, ~50-100mm text height is usually readable.
-    const textSize = Math.max(rangeY / 15, (maxX - minX) / 100, 25); 
+    // For Imperial, range might be 10 inches, so text size 0.5 inch.
+    // For Metric, range 300mm, text 15mm.
+    const textSize = Math.max(rangeY / 15, (maxX - minX) / 100, unit === 'imperial' ? 1 : 25); 
 
     // 2. Generate DXF Content
     let dxf = "";
     
-    // HEADER Section (Vital for Zoom Extents)
+    // HEADER Section
     dxf += "0\nSECTION\n";
     dxf += "2\nHEADER\n";
     dxf += "9\n$ACADVER\n1\nAC1009\n"; // R12 Version
+    // $MEASUREMENT: 0 = English (Imperial), 1 = Metric
+    dxf += "9\n$MEASUREMENT\n70\n" + (unit === 'imperial' ? 0 : 1) + "\n";
     dxf += "9\n$EXTMIN\n10\n" + minX + "\n20\n" + (minY - textSize * 3) + "\n30\n0.0\n";
     dxf += "9\n$EXTMAX\n10\n" + maxX + "\n20\n" + (maxY + textSize * 2) + "\n30\n0.0\n";
     dxf += "0\nENDSEC\n";
@@ -169,7 +174,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
 
     // --- Entity: Drape Text (Layer: TEXT_DRAPE) ---
     points.forEach(p => {
-        const label = Math.round(p.y).toString();
+        const label = Number(p.y).toFixed(unit === 'imperial' ? 2 : 0);
         // Position slightly above point
         const tx = p.x;
         const ty = p.y + (textSize * 0.5); 
@@ -189,7 +194,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
     let cx = 0;
     spaces.forEach(s => {
        const midX = cx + s/2;
-       const label = s.toString();
+       const label = Number(s).toFixed(unit === 'imperial' ? 2 : 0);
        const ty = -(textSize * 1.5); // Below axis
 
        dxf += "0\nTEXT\n";
@@ -216,7 +221,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'tendon_profile.dxf';
+    link.download = `tendon_profile_${unit}.dxf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -225,7 +230,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ drapes, spaces, infl
   return (
     <div className="mt-4 border-t border-gray-300 dark:border-gray-700 pt-2">
       <div className="flex justify-between items-center mb-2 px-1">
-        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Calculated Values</span>
+        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Calculated Values ({unitLabel})</span>
         <div className="flex gap-2">
             <button
             onClick={handleExportCSV}
